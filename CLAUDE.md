@@ -7,6 +7,12 @@ por resistencia a la insulina). Eslogan: *"Más equilibrio, un día a la vez."*
 El asistente dentro de la app se llama **Liria**: es la voz de los mensajes,
 recordatorios y resúmenes.
 
+- **Avatar de Liria:** un ajolote (no humano). Más adelante el usuario podrá
+  elegir entre 4 formas (brote, colibrí, ajolote, gota) al iniciar y cambiarla
+  en Ajustes; todas se llaman Liria.
+- **Frases de Liria:** un banco común para todos los avatares; cada avatar solo
+  tiene su saludo propio. Siempre sin culpa ni presión y sin consejos médicos.
+
 - Público: personas en México con RI. Solo en **español** por ahora.
 - Primera usuaria real: usa Wegovy (inyección semanal), metformina y otras
   pastillas, y se hace estudios de laboratorio e InBody periódicamente.
@@ -29,6 +35,10 @@ recordatorios y resúmenes.
 - **Datos locales:** `expo-sqlite`. La app debe funcionar **sin internet**.
 - **Recordatorios:** `expo-notifications` (notificaciones locales).
 - **Gráficas:** `victory-native` o `react-native-gifted-charts` (por decidir).
+- **Estilos:** `StyleSheet` nativo + tokens en un archivo de tema (colores,
+  tipografía, espaciado). Sin NativeWind ni librerías de componentes.
+- **Animaciones:** `react-native-reanimated`, `expo-haptics` e íconos de
+  `@expo/vector-icons`. Lottie solo cuando exista una animación diseñada.
 - **Backend:** Supabase (auth, Postgres con Row Level Security, storage para
   fotos/PDFs de estudios, Edge Functions).
 - **IA:** API de Claude llamada **solo desde una Supabase Edge Function**.
@@ -171,7 +181,11 @@ supabase/
   zona horaria del dispositivo. Los horarios de recordatorio ("08:00") se
   guardan como hora local, sin fecha ni zona.
 - **Llaves primarias UUID** en todas las tablas locales (no autoincrementales),
-  para poder sincronizar con Supabase en la fase 3 sin migrar IDs.
+  para que en la fase 3 los registros se suban a Supabase con el mismo ID, sin
+  renumerarlos.
+- **Nunca borrar la base local** para cambiar el esquema, ni siquiera en
+  desarrollo. Todo cambio se hace con una migración versionada con
+  `PRAGMA user_version` en `src/db/`.
 
 ## Publicación
 
