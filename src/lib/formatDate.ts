@@ -33,3 +33,14 @@ export function formatLongDate(date: Date): string {
   const month = MONTHS[date.getMonth()];
   return `${day} ${date.getDate()} de ${month}`;
 }
+
+/**
+ * Hora local en formato "HH:MM" (horario de recordatorio: sin fecha ni
+ * zona, regla de CLAUDE.md), ej. para guardar lo elegido en el selector
+ * nativo de hora.
+ */
+export function formatTimeOfDay(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
