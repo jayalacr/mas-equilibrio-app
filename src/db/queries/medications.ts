@@ -26,6 +26,7 @@ export type MedicationWithSchedule = {
   timeOfDay: string;
   frequency: Frequency;
   dayOfWeek: number | null;
+  createdAt: string;
 };
 
 export type DoseHistoryEntry = {
@@ -149,7 +150,8 @@ export async function listMedicationsWithSchedule(): Promise<MedicationWithSched
        s.dose_description as doseDescription,
        s.time_of_day as timeOfDay,
        s.frequency as frequency,
-       s.day_of_week as dayOfWeek
+       s.day_of_week as dayOfWeek,
+       m.created_at as createdAt
      FROM medications m
      JOIN dose_schedules s ON s.medication_id = m.id AND s.active_to IS NULL
      WHERE m.archived_at IS NULL

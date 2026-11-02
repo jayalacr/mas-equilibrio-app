@@ -34,6 +34,11 @@ export function formatLongDate(date: Date): string {
   return `${day} ${date.getDate()} de ${month}`;
 }
 
+/** Nombre del día en español, ej. "sábado". */
+export function formatWeekday(date: Date): string {
+  return DAYS[date.getDay()];
+}
+
 /**
  * Hora local en formato "HH:MM" (horario de recordatorio: sin fecha ni
  * zona, regla de CLAUDE.md), ej. para guardar lo elegido en el selector

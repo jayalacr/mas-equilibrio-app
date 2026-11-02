@@ -1,4 +1,4 @@
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,11 +54,9 @@ export default function MedicamentosScreen() {
     };
   }, []);
 
-  function handleTimeChange(event: DateTimePickerEvent, selectedDate?: Date) {
+  function handleTimeChange(_event: unknown, selectedDate: Date) {
     setShowTimePicker(false);
-    if (event.type === 'set' && selectedDate) {
-      setForm((f) => ({ ...f, time: selectedDate }));
-    }
+    setForm((f) => ({ ...f, time: selectedDate }));
   }
 
   async function reloadMedications() {
@@ -164,7 +162,12 @@ export default function MedicamentosScreen() {
               </Text>
             </Pressable>
             {showTimePicker && (
-              <DateTimePicker value={form.time} mode="time" onChange={handleTimeChange} />
+              <DateTimePicker
+                value={form.time}
+                mode="time"
+                onValueChange={handleTimeChange}
+                onDismiss={() => setShowTimePicker(false)}
+              />
             )}
 
             <View style={styles.segmentRow}>
