@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
+import { parseDecimal } from '@/features/medications/validateMedicationForm';
 import { formatTimeOfDay } from '@/lib/formatDate';
 
 import { getDatabase } from '../index';
@@ -12,6 +13,7 @@ export type NewMedicationInput = {
   presentation: Presentation;
   doseAmount: string;
   doseUnit: string;
+  quantityPerDose: string;
   time: Date;
   frequency: Frequency;
   dayOfWeek: number | null;
@@ -23,6 +25,8 @@ export type MedicationWithSchedule = {
   presentation: Presentation;
   unitLabel: string;
   doseDescription: string;
+  /** Clicks o tabletas por toma; null en medicamentos dados de alta antes de v2. */
+  quantityPerDose: number | null;
   timeOfDay: string;
   frequency: Frequency;
   dayOfWeek: number | null;
@@ -32,6 +36,7 @@ export type MedicationWithSchedule = {
 export type DoseHistoryEntry = {
   id: string;
   doseDescription: string;
+  quantityPerDose: number | null;
   changedAt: string;
   note: string | null;
 };
@@ -40,6 +45,7 @@ export type DoseChangeInput = {
   medicationId: string;
   doseAmount: string;
   doseUnit: string;
+  quantityPerDose: string;
   note: string;
 };
 
@@ -48,6 +54,7 @@ export async function createMedication(input: NewMedicationInput): Promise<strin
   const medicationId = Crypto.randomUUID();
   const now = new Date().toISOString();
   const doseDescription = `${input.doseAmount.replace(',', '.')} ${input.doseUnit}`;
+  const quantityPerDose = parseDecimal(input.quantityPerDose);
   const timeOfDay = formatTimeOfDay(input.time);
 
   await db.withTransactionAsync(async () => {
@@ -58,12 +65,14 @@ export async function createMedication(input: NewMedicationInput): Promise<strin
     );
     await db.runAsync(
       `INSERT INTO dose_schedules
-         (id, medication_id, dose_description, time_of_day, frequency, day_of_week, active_from)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (id, medication_id, dose_description, quantity_per_dose, time_of_day, frequency,
+          day_of_week, active_from)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         Crypto.randomUUID(),
         medicationId,
         doseDescription,
+        quantityPerDose,
         timeOfDay,
         input.frequency,
         input.dayOfWeek,
@@ -71,9 +80,10 @@ export async function createMedication(input: NewMedicationInput): Promise<strin
       ]
     );
     await db.runAsync(
-      `INSERT INTO dose_history (id, medication_id, dose_description, changed_at, note)
-       VALUES (?, ?, ?, ?, ?)`,
-      [Crypto.randomUUID(), medicationId, doseDescription, now, 'Alta inicial']
+      `INSERT INTO dose_history
+         (id, medication_id, dose_description, quantity_per_dose, changed_at, note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [Crypto.randomUUID(), medicationId, doseDescription, quantityPerDose, now, 'Alta inicial']
     );
   });
 
@@ -84,6 +94,7 @@ export async function changeDose(input: DoseChangeInput): Promise<void> {
   const db = await getDatabase();
   const now = new Date().toISOString();
   const doseDescription = `${input.doseAmount.replace(',', '.')} ${input.doseUnit}`;
+  const quantityPerDose = parseDecimal(input.quantityPerDose);
 
   await db.withTransactionAsync(async () => {
     const activeSchedule = await db.getFirstAsync<{
@@ -104,12 +115,14 @@ export async function changeDose(input: DoseChangeInput): Promise<void> {
     ]);
     await db.runAsync(
       `INSERT INTO dose_schedules
-         (id, medication_id, dose_description, time_of_day, frequency, day_of_week, active_from)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (id, medication_id, dose_description, quantity_per_dose, time_of_day, frequency,
+          day_of_week, active_from)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         Crypto.randomUUID(),
         input.medicationId,
         doseDescription,
+        quantityPerDose,
         activeSchedule.time_of_day,
         activeSchedule.frequency,
         activeSchedule.day_of_week,
@@ -117,9 +130,17 @@ export async function changeDose(input: DoseChangeInput): Promise<void> {
       ]
     );
     await db.runAsync(
-      `INSERT INTO dose_history (id, medication_id, dose_description, changed_at, note)
-       VALUES (?, ?, ?, ?, ?)`,
-      [Crypto.randomUUID(), input.medicationId, doseDescription, now, input.note.trim() || null]
+      `INSERT INTO dose_history
+         (id, medication_id, dose_description, quantity_per_dose, changed_at, note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        Crypto.randomUUID(),
+        input.medicationId,
+        doseDescription,
+        quantityPerDose,
+        now,
+        input.note.trim() || null,
+      ]
     );
     await db.runAsync('UPDATE medications SET unit_label = ? WHERE id = ?', [
       input.doseUnit,
@@ -131,7 +152,8 @@ export async function changeDose(input: DoseChangeInput): Promise<void> {
 export async function listDoseHistory(medicationId: string): Promise<DoseHistoryEntry[]> {
   const db = await getDatabase();
   return db.getAllAsync<DoseHistoryEntry>(
-    `SELECT id as id, dose_description as doseDescription, changed_at as changedAt, note as note
+    `SELECT id as id, dose_description as doseDescription,
+            quantity_per_dose as quantityPerDose, changed_at as changedAt, note as note
      FROM dose_history
      WHERE medication_id = ?
      ORDER BY changed_at DESC`,
@@ -148,6 +170,7 @@ export async function listMedicationsWithSchedule(): Promise<MedicationWithSched
        m.presentation as presentation,
        m.unit_label as unitLabel,
        s.dose_description as doseDescription,
+       s.quantity_per_dose as quantityPerDose,
        s.time_of_day as timeOfDay,
        s.frequency as frequency,
        s.day_of_week as dayOfWeek,

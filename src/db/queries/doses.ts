@@ -3,38 +3,55 @@ import * as Crypto from 'expo-crypto';
 import type { InjectionSite, TakenDose } from '@/features/doses/todayDoses';
 
 import { getDatabase } from '../index';
+import { adjustStockBy } from './inventory';
 
 export type RecordDoseInput = {
   medicationId: string;
   scheduledTime: string;
   takenAt: Date;
   doseDescription: string;
+  /** Lo que se descuenta del inventario; null si el medicamento aún no lo tiene. */
+  quantity: number | null;
   injectionSite: InjectionSite | null;
   sideEffectNote: string;
 };
 
+// La toma y el descuento van en una transacción: o se guardan ambos o ninguno.
 export async function recordDoseTaken(input: RecordDoseInput): Promise<void> {
   const db = await getDatabase();
-  await db.runAsync(
-    `INSERT INTO doses_taken
-       (id, medication_id, scheduled_time, taken_at, dose_description, injection_site, side_effect_note)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      Crypto.randomUUID(),
-      input.medicationId,
-      input.scheduledTime,
-      input.takenAt.toISOString(),
-      input.doseDescription,
-      input.injectionSite,
-      input.sideEffectNote.trim() || null,
-    ]
-  );
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO doses_taken
+         (id, medication_id, scheduled_time, taken_at, dose_description, quantity_taken,
+          injection_site, side_effect_note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        Crypto.randomUUID(),
+        input.medicationId,
+        input.scheduledTime,
+        input.takenAt.toISOString(),
+        input.doseDescription,
+        input.quantity,
+        input.injectionSite,
+        input.sideEffectNote.trim() || null,
+      ]
+    );
+    if (input.quantity) await adjustStockBy(db, input.medicationId, -input.quantity);
+  });
 }
 
-// ponytail: borrado físico; en la 1.5 también debe regresar el inventario descontado.
+// ponytail: borrado físico; si hace falta auditar tomas deshechas, marcar con `undone_at`.
 export async function undoDoseTaken(id: string): Promise<void> {
   const db = await getDatabase();
-  await db.runAsync('DELETE FROM doses_taken WHERE id = ?', [id]);
+  await db.withTransactionAsync(async () => {
+    const dose = await db.getFirstAsync<{ medication_id: string; quantity_taken: number | null }>(
+      'SELECT medication_id, quantity_taken FROM doses_taken WHERE id = ?',
+      [id]
+    );
+    if (!dose) return;
+    if (dose.quantity_taken) await adjustStockBy(db, dose.medication_id, dose.quantity_taken);
+    await db.runAsync('DELETE FROM doses_taken WHERE id = ?', [id]);
+  });
 }
 
 /** Tomas cuyo momento programado es igual o posterior a `fromIso` (UTC). */

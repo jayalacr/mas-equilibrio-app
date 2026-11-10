@@ -1,9 +1,14 @@
-import { validateMedicationForm, type MedicationFormState } from './validateMedicationForm';
+import {
+  validateMedicationForm,
+  validateStock,
+  type MedicationFormState,
+} from './validateMedicationForm';
 
 const base: MedicationFormState = {
   name: 'Wegovy',
   doseAmount: '1',
   doseUnit: 'mg',
+  quantityPerDose: '4',
   frequency: 'daily',
   dayOfWeek: null,
 };
@@ -41,5 +46,24 @@ describe('validateMedicationForm', () => {
     expect(
       validateMedicationForm({ ...base, frequency: 'weekly', dayOfWeek: 1 })
     ).toBeNull();
+  });
+
+  it('requires a positive quantity per dose', () => {
+    expect(validateMedicationForm({ ...base, quantityPerDose: '' })).toMatch(/clicks o tabletas/);
+    expect(validateMedicationForm({ ...base, quantityPerDose: '0' })).toMatch(/clicks o tabletas/);
+    expect(validateMedicationForm({ ...base, quantityPerDose: '0,5' })).toBeNull();
+  });
+});
+
+describe('validateStock', () => {
+  it('accepts zero or more', () => {
+    expect(validateStock('0')).toBeNull();
+    expect(validateStock('30')).toBeNull();
+  });
+
+  it('rejects negatives and text', () => {
+    expect(validateStock('-1')).toMatch(/quedan/);
+    expect(validateStock('abc')).toMatch(/quedan/);
+    expect(validateStock('')).toMatch(/quedan/);
   });
 });

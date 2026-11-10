@@ -45,4 +45,19 @@ export const MIGRATIONS: readonly string[][] = [
       last_updated_at TEXT NOT NULL
     );`,
   ],
+  // v2 — inventario: cantidad física por toma (clicks/tabletas), separada de la
+  // dosis clínica. `inventory` se reconstruye sin `unit_type` (la unidad sale de
+  // la presentación); en v1 nada la escribía, así que estaba vacía.
+  [
+    `ALTER TABLE dose_schedules ADD COLUMN quantity_per_dose REAL;`,
+    `ALTER TABLE dose_history ADD COLUMN quantity_per_dose REAL;`,
+    `ALTER TABLE doses_taken ADD COLUMN quantity_taken REAL;`,
+    `DROP TABLE inventory;`,
+    `CREATE TABLE inventory (
+      id TEXT PRIMARY KEY NOT NULL,
+      medication_id TEXT NOT NULL UNIQUE REFERENCES medications(id),
+      remaining_units REAL NOT NULL,
+      last_updated_at TEXT NOT NULL
+    );`,
+  ],
 ];

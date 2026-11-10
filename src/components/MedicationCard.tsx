@@ -7,8 +7,20 @@ import {
   type DoseHistoryEntry,
   type MedicationWithSchedule,
 } from '@/db/queries/medications';
-import { DOSE_UNITS } from '@/features/medications/doseUnits';
-import { validateDoseAmountAndUnit } from '@/features/medications/validateMedicationForm';
+import { setStock } from '@/db/queries/inventory';
+import { isLowStock, type StockStatus } from '@/features/inventory/stock';
+import {
+  describeDose,
+  DOSE_UNITS,
+  formatQuantity,
+  QUANTITY_UNIT,
+} from '@/features/medications/doseUnits';
+import {
+  parseDecimal,
+  validateDoseAmountAndUnit,
+  validateQuantityPerDose,
+  validateStock,
+} from '@/features/medications/validateMedicationForm';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -17,7 +29,7 @@ function describeSchedule(med: MedicationWithSchedule): string {
   const when = med.frequency === 'weekly' && med.dayOfWeek !== null
     ? `${DAYS[med.dayOfWeek]} ${med.timeOfDay}`
     : `Diario ${med.timeOfDay}`;
-  return `${med.doseDescription} · ${when}`;
+  return `${describeDose(med)} · ${when}`;
 }
 
 function formatChangedAt(iso: string): string {
@@ -28,16 +40,34 @@ function formatChangedAt(iso: string): string {
   })}`;
 }
 
+function describeStock(stock: StockStatus, unit: string): string {
+  const remaining = `Quedan ${formatQuantity(Math.max(0, stock.remaining))} ${unit}`;
+  return stock.daysLeft === null ? remaining : `${remaining} · ~${stock.daysLeft} días`;
+}
+
+// Los medicamentos dados de alta antes de v2 pueden tener "clicks" o "tabletas" como unidad.
+function clinicalUnit(unitLabel: string): string {
+  return (DOSE_UNITS as readonly string[]).includes(unitLabel) ? unitLabel : DOSE_UNITS[0];
+}
+
 type Props = {
   medication: MedicationWithSchedule;
-  onDoseChanged: () => void;
+  /** undefined si todavía no se registran existencias. */
+  stock: StockStatus | undefined;
+  onChanged: () => void;
 };
 
-export function MedicationCard({ medication, onDoseChanged }: Props) {
+export function MedicationCard({ medication, stock, onChanged }: Props) {
+  const quantityUnit = QUANTITY_UNIT[medication.presentation];
+
   const [showChangeForm, setShowChangeForm] = useState(false);
   const [doseAmount, setDoseAmount] = useState('');
-  const [doseUnit, setDoseUnit] = useState(medication.unitLabel);
+  const [doseUnit, setDoseUnit] = useState(clinicalUnit(medication.unitLabel));
+  const [quantityPerDose, setQuantityPerDose] = useState('');
   const [note, setNote] = useState('');
+
+  const [showStockForm, setShowStockForm] = useState(false);
+  const [stockInput, setStockInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -59,24 +89,52 @@ export function MedicationCard({ medication, onDoseChanged }: Props) {
 
   function openChangeForm() {
     setDoseAmount('');
-    setDoseUnit(medication.unitLabel);
+    setDoseUnit(clinicalUnit(medication.unitLabel));
+    setQuantityPerDose(
+      medication.quantityPerDose == null ? '' : String(medication.quantityPerDose)
+    );
     setNote('');
     setError(null);
+    setShowStockForm(false);
     setShowChangeForm(true);
   }
 
+  function openStockForm() {
+    setStockInput(stock ? String(Math.max(0, stock.remaining)) : '');
+    setError(null);
+    setShowChangeForm(false);
+    setShowStockForm((v) => !v);
+  }
+
   async function handleSaveDoseChange() {
-    const validationError = validateDoseAmountAndUnit(doseAmount, doseUnit);
+    const validationError =
+      validateDoseAmountAndUnit(doseAmount, doseUnit) ?? validateQuantityPerDose(quantityPerDose);
     if (validationError) {
       setError(validationError);
       return;
     }
     setSaving(true);
     try {
-      await changeDose({ medicationId: medication.id, doseAmount, doseUnit, note });
+      await changeDose({ medicationId: medication.id, doseAmount, doseUnit, quantityPerDose, note });
       setShowChangeForm(false);
-      onDoseChanged();
+      onChanged();
       if (showHistory) await loadHistory();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveStock() {
+    const validationError = validateStock(stockInput);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setSaving(true);
+    try {
+      await setStock(medication.id, parseDecimal(stockInput)!);
+      setShowStockForm(false);
+      onChanged();
     } finally {
       setSaving(false);
     }
@@ -89,10 +147,24 @@ export function MedicationCard({ medication, onDoseChanged }: Props) {
         {medication.presentation === 'pen' ? 'Pluma' : 'Tabletas'} ·{' '}
         {describeSchedule(medication)}
       </Text>
+      {medication.quantityPerDose == null && (
+        <Text style={styles.hint}>
+          Agrega cuántos {quantityUnit} usas por toma en “Cambiar dosis” para llevar tu
+          inventario.
+        </Text>
+      )}
+      {stock && (
+        <Text style={[styles.stockText, isLowStock(stock) && styles.stockLow]}>
+          {describeStock(stock, quantityUnit)}
+        </Text>
+      )}
 
       <View style={styles.actionRow}>
         <Pressable onPress={openChangeForm} style={styles.actionButton}>
           <Text style={styles.actionButtonText}>Cambiar dosis</Text>
+        </Pressable>
+        <Pressable onPress={openStockForm} style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Existencias</Text>
         </Pressable>
         <Pressable onPress={toggleHistory} style={styles.actionButton}>
           <Text style={styles.actionButtonText}>
@@ -125,6 +197,17 @@ export function MedicationCard({ medication, onDoseChanged }: Props) {
               ))}
             </View>
           </View>
+          <View style={styles.quantityRow}>
+            <TextInput
+              style={[styles.input, styles.quantityInput]}
+              placeholder="Cantidad por toma"
+              placeholderTextColor={colors.textMuted}
+              value={quantityPerDose}
+              onChangeText={setQuantityPerDose}
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.quantityUnit}>{quantityUnit}</Text>
+          </View>
           <TextInput
             style={styles.input}
             placeholder="Nota (opcional, ej. indicado por el médico el 20/10)"
@@ -139,6 +222,29 @@ export function MedicationCard({ medication, onDoseChanged }: Props) {
         </View>
       )}
 
+      {showStockForm && (
+        <View style={styles.changeForm}>
+          <Text style={styles.cardSubtitle}>
+            ¿Cuántos {quantityUnit} te quedan en total? Si acabas de comprar, súmalos.
+          </Text>
+          <View style={styles.quantityRow}>
+            <TextInput
+              style={[styles.input, styles.quantityInput]}
+              placeholder="Existencias"
+              placeholderTextColor={colors.textMuted}
+              value={stockInput}
+              onChangeText={setStockInput}
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.quantityUnit}>{quantityUnit}</Text>
+          </View>
+          {error && <Text style={styles.error}>{error}</Text>}
+          <Pressable style={styles.saveButton} onPress={handleSaveStock} disabled={saving}>
+            <Text style={styles.saveButtonText}>{saving ? 'Guardando…' : 'Guardar existencias'}</Text>
+          </Pressable>
+        </View>
+      )}
+
       {showHistory && (
         <View style={styles.history}>
           {history?.length === 0 && (
@@ -146,7 +252,9 @@ export function MedicationCard({ medication, onDoseChanged }: Props) {
           )}
           {history?.map((entry) => (
             <View key={entry.id} style={styles.historyRow}>
-              <Text style={styles.historyDose}>{entry.doseDescription}</Text>
+              <Text style={styles.historyDose}>
+                {describeDose({ ...entry, presentation: medication.presentation })}
+              </Text>
               <Text style={styles.historyMeta}>
                 {formatChangedAt(entry.changedAt)}
                 {entry.note ? ` · ${entry.note}` : ''}
@@ -177,8 +285,40 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.textMuted,
   },
+  hint: {
+    ...typography.bodySm,
+    color: colors.terracottaText,
+  },
+  stockText: {
+    ...typography.bodySm,
+    fontFamily: fontFamilyMedium,
+    color: colors.text,
+  },
+  // terracottaText solo casi no se distingue de colors.text: se marca como píldora.
+  stockLow: {
+    color: colors.terracottaText,
+    backgroundColor: colors.terracottaSoft,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    overflow: 'hidden',
+  },
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  quantityInput: {
+    flex: 1,
+  },
+  quantityUnit: {
+    ...typography.bodyMd,
+    color: colors.textMuted,
+  },
   actionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.xs,
   },

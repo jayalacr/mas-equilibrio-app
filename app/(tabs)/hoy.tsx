@@ -6,28 +6,51 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MarkDoseSheet } from '@/components/MarkDoseSheet';
 import { MedicalDisclaimer } from '@/components/MedicalDisclaimer';
 import { listDosesTakenSince, undoDoseTaken } from '@/db/queries/doses';
+import { listStock } from '@/db/queries/inventory';
 import { listMedicationsWithSchedule, type MedicationWithSchedule } from '@/db/queries/medications';
 import { buildTodayDoses, INJECTION_SITE_LABELS, type TodayDose } from '@/features/doses/todayDoses';
+import {
+  buildStockStatus,
+  consumptionWindowStart,
+  isLowStock,
+  type StockStatus,
+} from '@/features/inventory/stock';
+import { describeDose } from '@/features/medications/doseUnits';
 import { formatLongDate, formatTimeOfDay, formatWeekday } from '@/lib/formatDate';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
 type Dose = TodayDose<MedicationWithSchedule>;
+type LowStock = { medication: MedicationWithSchedule; stock: StockStatus };
+
+// Voz de Liria: informa sin presionar.
+function lowStockMessage({ medication, stock }: LowStock): string {
+  if (stock.daysLeft === 0) {
+    return `Ya no te quedan existencias registradas de ${medication.name}. Si ya conseguiste más, actualízalas en Medicamentos.`;
+  }
+  return `Te quedan ~${stock.daysLeft} días de ${medication.name}. Puede ser buen momento para conseguir más.`;
+}
 
 export default function HoyScreen() {
   const [now, setNow] = useState(new Date());
   const [doses, setDoses] = useState<Dose[]>([]);
   const [selected, setSelected] = useState<Dose | null>(null);
+  const [lowStock, setLowStock] = useState<LowStock[]>([]);
 
   const reload = useCallback(async () => {
     const current = new Date();
     // Una semana atrás alcanza para encontrar la semanal pendiente más vieja.
     const weekAgo = new Date(current.getFullYear(), current.getMonth(), current.getDate() - 7);
-    const [meds, taken] = await Promise.all([
+    const [meds, taken, stockRows] = await Promise.all([
       listMedicationsWithSchedule(),
       listDosesTakenSince(weekAgo.toISOString()),
+      listStock(consumptionWindowStart(current).toISOString()),
     ]);
+    const stock = buildStockStatus(meds, stockRows, current);
     setNow(current);
     setDoses(buildTodayDoses(meds, taken, current));
+    setLowStock(
+      meds.filter((m) => isLowStock(stock[m.id])).map((m) => ({ medication: m, stock: stock[m.id] }))
+    );
   }, []);
 
   // Al entrar a la pestaña (p. ej. después de dar de alta un medicamento).
@@ -58,6 +81,12 @@ export default function HoyScreen() {
           <Text style={styles.date}>{formatLongDate(now)}</Text>
         </View>
 
+        {lowStock.map((item) => (
+          <View key={item.medication.id} style={styles.stockBanner}>
+            <Text style={styles.stockBannerText}>{lowStockMessage(item)}</Text>
+          </View>
+        ))}
+
         {doses.length === 0 && (
           <Text style={styles.placeholder}>
             No tienes tomas para hoy. Puedes agregar tus medicamentos en la pestaña Medicamentos.
@@ -72,7 +101,7 @@ export default function HoyScreen() {
               <Text style={styles.time}>{dose.medication.timeOfDay}</Text>
               <View style={styles.cardText}>
                 <Text style={styles.name}>{dose.medication.name}</Text>
-                <Text style={styles.detail}>{dose.medication.doseDescription}</Text>
+                <Text style={styles.detail}>{describeDose(dose.medication)}</Text>
                 {dose.fromPastDay && !dose.taken && (
                   <Text style={styles.pastDay}>
                     Pendiente desde el {formatWeekday(dose.scheduledAt)}
@@ -141,6 +170,15 @@ const styles = StyleSheet.create({
   placeholder: {
     ...typography.bodyMd,
     color: colors.textMuted,
+  },
+  stockBanner: {
+    backgroundColor: colors.surfaceWarm,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  stockBannerText: {
+    ...typography.bodyMd,
+    color: colors.text,
   },
   card: {
     backgroundColor: colors.surface,

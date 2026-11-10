@@ -1,5 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,24 +13,26 @@ import {
   type MedicationWithSchedule,
   type Presentation,
 } from '@/db/queries/medications';
-import { DOSE_UNITS } from '@/features/medications/doseUnits';
+import { listStock } from '@/db/queries/inventory';
+import {
+  buildStockStatus,
+  consumptionWindowStart,
+  type StockStatus,
+} from '@/features/inventory/stock';
+import { DOSE_UNITS, QUANTITY_UNIT } from '@/features/medications/doseUnits';
 import { validateMedicationForm } from '@/features/medications/validateMedicationForm';
 import { formatTimeOfDay } from '@/lib/formatDate';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-const DEFAULT_UNIT_BY_PRESENTATION: Record<Presentation, string> = {
-  pen: 'clicks',
-  tablet: 'tabletas',
-};
-
 function makeEmptyForm() {
   return {
     name: '',
     presentation: 'pen' as Presentation,
     doseAmount: '',
-    doseUnit: DEFAULT_UNIT_BY_PRESENTATION.pen,
+    doseUnit: 'mg',
+    quantityPerDose: '',
     time: new Date(),
     frequency: 'daily' as Frequency,
     dayOfWeek: null as number | null,
@@ -38,29 +41,33 @@ function makeEmptyForm() {
 
 export default function MedicamentosScreen() {
   const [medications, setMedications] = useState<MedicationWithSchedule[]>([]);
+  const [stock, setStock] = useState<Record<string, StockStatus>>({});
   const [showForm, setShowForm] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [form, setForm] = useState(makeEmptyForm);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    listMedicationsWithSchedule().then((meds) => {
-      if (!cancelled) setMedications(meds);
-    });
-    return () => {
-      cancelled = true;
-    };
+  const reloadMedications = useCallback(async () => {
+    const now = new Date();
+    const [meds, rows] = await Promise.all([
+      listMedicationsWithSchedule(),
+      listStock(consumptionWindowStart(now).toISOString()),
+    ]);
+    setMedications(meds);
+    setStock(buildStockStatus(meds, rows, now));
   }, []);
+
+  // Al entrar a la pestaña: en Hoy pudo haberse registrado una toma que descontó existencias.
+  useFocusEffect(
+    useCallback(() => {
+      reloadMedications();
+    }, [reloadMedications])
+  );
 
   function handleTimeChange(_event: unknown, selectedDate: Date) {
     setShowTimePicker(false);
     setForm((f) => ({ ...f, time: selectedDate }));
-  }
-
-  async function reloadMedications() {
-    setMedications(await listMedicationsWithSchedule());
   }
 
   async function handleSave() {
@@ -107,13 +114,7 @@ export default function MedicamentosScreen() {
               {(['pen', 'tablet'] as Presentation[]).map((presentation) => (
                 <Pressable
                   key={presentation}
-                  onPress={() =>
-                    setForm((f) => ({
-                      ...f,
-                      presentation,
-                      doseUnit: DEFAULT_UNIT_BY_PRESENTATION[presentation],
-                    }))
-                  }
+                  onPress={() => setForm((f) => ({ ...f, presentation }))}
                   style={[
                     styles.segment,
                     form.presentation === presentation && styles.segmentActive,
@@ -132,7 +133,7 @@ export default function MedicamentosScreen() {
             <View style={styles.doseRow}>
               <TextInput
                 style={[styles.input, styles.doseAmountInput]}
-                placeholder="Dosis"
+                placeholder="Dosis indicada por tu médico"
                 placeholderTextColor={colors.textMuted}
                 value={form.doseAmount}
                 onChangeText={(doseAmount) => setForm((f) => ({ ...f, doseAmount }))}
@@ -154,6 +155,18 @@ export default function MedicamentosScreen() {
                   </Pressable>
                 ))}
               </View>
+            </View>
+
+            <View style={styles.quantityRow}>
+              <TextInput
+                style={[styles.input, styles.quantityInput]}
+                placeholder="Cantidad por toma"
+                placeholderTextColor={colors.textMuted}
+                value={form.quantityPerDose}
+                onChangeText={(quantityPerDose) => setForm((f) => ({ ...f, quantityPerDose }))}
+                keyboardType="decimal-pad"
+              />
+              <Text style={styles.quantityUnit}>{QUANTITY_UNIT[form.presentation]}</Text>
             </View>
 
             <Pressable style={styles.input} onPress={() => setShowTimePicker(true)}>
@@ -224,7 +237,12 @@ export default function MedicamentosScreen() {
         )}
 
         {medications.map((med) => (
-          <MedicationCard key={med.id} medication={med} onDoseChanged={reloadMedications} />
+          <MedicationCard
+            key={med.id}
+            medication={med}
+            stock={stock[med.id]}
+            onChanged={reloadMedications}
+          />
         ))}
       </ScrollView>
       <MedicalDisclaimer />
@@ -293,6 +311,18 @@ const styles = StyleSheet.create({
   },
   doseAmountInput: {
     width: '100%',
+  },
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  quantityInput: {
+    flex: 1,
+  },
+  quantityUnit: {
+    ...typography.bodyMd,
+    color: colors.textMuted,
   },
   unitRow: {
     flexDirection: 'row',

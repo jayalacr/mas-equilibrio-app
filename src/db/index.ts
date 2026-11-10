@@ -12,9 +12,13 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     'PRAGMA user_version'
   ))!;
 
+  // Cada migración va en una transacción: si algo falla a la mitad, no queda
+  // aplicada a medias y se reintenta completa la próxima vez.
   for (const migration of pendingMigrations(currentVersion)) {
-    await db.execAsync(migration.statements.join('\n'));
-    await db.execAsync(`PRAGMA user_version = ${migration.version}`);
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(migration.statements.join('\n'));
+      await db.execAsync(`PRAGMA user_version = ${migration.version}`);
+    });
   }
 
   return db;

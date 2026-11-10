@@ -10,6 +10,7 @@ import {
   type InjectionSite,
   type TodayDose,
 } from '@/features/doses/todayDoses';
+import { describeDose } from '@/features/medications/doseUnits';
 import { formatTimeOfDay } from '@/lib/formatDate';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
@@ -50,6 +51,7 @@ export function MarkDoseSheet({ dose, onClose, onSaved }: Props) {
         scheduledTime: dose.scheduledTime,
         takenAt,
         doseDescription: medication.doseDescription,
+        quantity: medication.quantityPerDose,
         injectionSite: isPen ? site : null,
         sideEffectNote: note,
       });
@@ -65,7 +67,7 @@ export function MarkDoseSheet({ dose, onClose, onSaved }: Props) {
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <Text style={styles.title}>{medication.name}</Text>
-          <Text style={styles.subtitle}>Dosis indicada: {medication.doseDescription}</Text>
+          <Text style={styles.subtitle}>Dosis indicada: {describeDose(medication)}</Text>
 
           <Pressable style={styles.input} onPress={() => setShowTimePicker(true)}>
             <Text style={styles.inputText}>Hora de la toma: {formatTimeOfDay(takenAt)}</Text>
