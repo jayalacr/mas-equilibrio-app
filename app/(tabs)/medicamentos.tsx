@@ -21,6 +21,7 @@ import {
 } from '@/features/inventory/stock';
 import { DOSE_UNITS, QUANTITY_UNIT } from '@/features/medications/doseUnits';
 import { validateMedicationForm } from '@/features/medications/validateMedicationForm';
+import { enableReminders, remindersEnabled, syncReminders } from '@/notifications';
 import { formatTimeOfDay } from '@/lib/formatDate';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
@@ -47,6 +48,7 @@ export default function MedicamentosScreen() {
   const [form, setForm] = useState(makeEmptyForm);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [remindersOff, setRemindersOff] = useState(false);
 
   const reloadMedications = useCallback(async () => {
     const now = new Date();
@@ -56,6 +58,7 @@ export default function MedicamentosScreen() {
     ]);
     setMedications(meds);
     setStock(buildStockStatus(meds, rows, now));
+    setRemindersOff(!(await remindersEnabled()));
   }, []);
 
   // Al entrar a la pestaña: en Hoy pudo haberse registrado una toma que descontó existencias.
@@ -79,6 +82,7 @@ export default function MedicamentosScreen() {
     setSaving(true);
     try {
       await createMedication(form);
+      syncReminders();
       setForm(makeEmptyForm());
       setShowForm(false);
       setError(null);
@@ -99,6 +103,15 @@ export default function MedicamentosScreen() {
             <Text style={styles.addButtonText}>{showForm ? 'Cancelar' : '+ Agregar'}</Text>
           </Pressable>
         </View>
+
+        {remindersOff && (
+          <Pressable onPress={() => enableReminders().then(reloadMedications)}>
+            <Text style={styles.remindersOff}>
+              Los recordatorios están desactivados ·{' '}
+              <Text style={styles.remindersOffLink}>Activar</Text>
+            </Text>
+          </Pressable>
+        )}
 
         {showForm && (
           <View style={styles.form}>
@@ -288,6 +301,14 @@ const styles = StyleSheet.create({
   placeholder: {
     ...typography.bodyMd,
     color: colors.textMuted,
+  },
+  remindersOff: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  remindersOffLink: {
+    fontFamily: fontFamilyMedium,
+    color: colors.primaryDark,
   },
   form: {
     backgroundColor: colors.surface,

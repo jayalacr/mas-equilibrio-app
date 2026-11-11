@@ -16,6 +16,7 @@ import {
   type StockStatus,
 } from '@/features/inventory/stock';
 import { describeDose } from '@/features/medications/doseUnits';
+import { syncReminders } from '@/notifications';
 import { formatLongDate, formatTimeOfDay, formatWeekday } from '@/lib/formatDate';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
@@ -71,6 +72,7 @@ export default function HoyScreen() {
   async function handleUndo(id: string) {
     await undoDoseTaken(id);
     await reload();
+    syncReminders(); // vuelve a programar el segundo aviso de esa toma
   }
 
   return (
@@ -138,6 +140,7 @@ export default function HoyScreen() {
           onSaved={() => {
             setSelected(null);
             reload();
+            syncReminders(); // ya no hace falta el segundo aviso de esta toma
           }}
         />
       )}

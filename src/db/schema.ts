@@ -60,4 +60,13 @@ export const MIGRATIONS: readonly string[][] = [
       last_updated_at TEXT NOT NULL
     );`,
   ],
+  // v3 — perfil local de una sola fila. Que exista la fila significa que ya
+  // se pasó por la bienvenida. En la fase 3 corresponde al perfil en Supabase.
+  [
+    `CREATE TABLE user_profile (
+      id TEXT PRIMARY KEY NOT NULL,
+      display_name TEXT,
+      created_at TEXT NOT NULL
+    );`,
+  ],
 ];
