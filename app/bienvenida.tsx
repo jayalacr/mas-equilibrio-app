@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/Button';
 import { MedicalDisclaimer } from '@/components/MedicalDisclaimer';
 import { createProfile } from '@/db/queries/profile';
 import { enableReminders } from '@/notifications';
@@ -52,15 +53,13 @@ export default function BienvenidaScreen() {
             Puedo avisarte cuando sea hora de tus tomas y, si todavía no las marcas, otra vez
             30 minutos después.
           </Text>
-          <Pressable
-            style={styles.primaryButton}
+          <Button
+            label="Activar recordatorios"
             onPress={() => finish(true)}
-            disabled={saving}>
-            <Text style={styles.primaryButtonText}>Activar recordatorios</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => finish(false)} disabled={saving}>
-            <Text style={styles.secondaryButtonText}>Ahora no</Text>
-          </Pressable>
+            disabled={saving}
+            style={styles.primaryButton}
+          />
+          <Button label="Ahora no" variant="text" onPress={() => finish(false)} disabled={saving} />
         </View>
       </ScrollView>
       <MedicalDisclaimer />
@@ -106,24 +105,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   primaryButton: {
-    backgroundColor: colors.primary,
     borderRadius: radii.pill,
-    padding: spacing.md,
-    alignItems: 'center',
+    minHeight: 52, // acción principal de la bienvenida, un poco más grande
     marginTop: spacing.sm,
-  },
-  primaryButtonText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.surface,
-  },
-  secondaryButton: {
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.primaryDark,
   },
 });

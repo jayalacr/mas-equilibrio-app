@@ -30,6 +30,15 @@ export const colors = {
   successText: '#1E4D39',
   pending: '#E8EEF4',
   pendingText: '#34495E',
+
+  // Interacción
+  ripple: 'rgba(44, 62, 80, 0.12)', // efecto al tocar en Android
+} as const;
+
+// Respuesta visual al tocar y estado deshabilitado.
+export const opacity = {
+  pressed: 0.7,
+  disabled: 0.5,
 } as const;
 
 export const spacing = {

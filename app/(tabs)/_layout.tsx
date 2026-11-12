@@ -9,7 +9,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primaryDark,
-        tabBarInactiveTintColor: colors.text,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
@@ -19,8 +19,12 @@ export default function TabsLayout() {
         name="hoy"
         options={{
           title: 'Hoy',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="leaf-outline" size={size} color={color as string} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'leaf' : 'leaf-outline'}
+              size={size}
+              color={color as string}
+            />
           ),
         }}
       />
@@ -28,8 +32,12 @@ export default function TabsLayout() {
         name="medicamentos"
         options={{
           title: 'Medicamentos',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="medkit-outline" size={size} color={color as string} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'medkit' : 'medkit-outline'}
+              size={size}
+              color={color as string}
+            />
           ),
         }}
       />
@@ -37,8 +45,12 @@ export default function TabsLayout() {
         name="progreso"
         options={{
           title: 'Progreso',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" size={size} color={color as string} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'stats-chart' : 'stats-chart-outline'}
+              size={size}
+              color={color as string}
+            />
           ),
         }}
       />

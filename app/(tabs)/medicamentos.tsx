@@ -1,9 +1,13 @@
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/Button';
+import { Chip } from '@/components/Chip';
+import { Field } from '@/components/Field';
 import { MedicalDisclaimer } from '@/components/MedicalDisclaimer';
 import { MedicationCard } from '@/components/MedicationCard';
 import {
@@ -22,13 +26,12 @@ import {
   consumptionWindowStart,
   type StockStatus,
 } from '@/features/inventory/stock';
+import { DAYS } from '@/features/medications/describe';
 import { DOSE_UNITS, QUANTITY_UNIT } from '@/features/medications/doseUnits';
 import { validateMedicationForm } from '@/features/medications/validateMedicationForm';
 import { enableReminders, remindersEnabled, syncReminders } from '@/notifications';
 import { formatTimeOfDay } from '@/lib/formatDate';
-import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
-
-const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+import { colors, fontFamilyBold, fontFamilyMedium, opacity, radii, spacing, typography } from '@/theme';
 
 function makeEmptyForm() {
   return {
@@ -107,18 +110,28 @@ export default function MedicamentosScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* automaticallyAdjustKeyboardInsets (iOS): deja hacer scroll hasta el campo que el teclado tapaba.
+          keyboardShouldPersistTaps: tocar una ficha con el teclado abierto la selecciona al primer toque. */}
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets>
         <View style={styles.headerRow}>
           <Text style={styles.title}>Medicamentos</Text>
-          <Pressable
+          <Button
+            label={showForm ? 'Cancelar' : '+ Agregar'}
+            variant={showForm ? 'secondary' : 'primary'}
             onPress={() => setShowForm((v) => !v)}
-            style={[styles.addButton, showForm && styles.addButtonActive]}>
-            <Text style={styles.addButtonText}>{showForm ? 'Cancelar' : '+ Agregar'}</Text>
-          </Pressable>
+            style={styles.addButton}
+          />
         </View>
 
         {remindersOff && (
-          <Pressable onPress={() => enableReminders().then(reloadMedications)}>
+          <Pressable
+            onPress={() => enableReminders().then(reloadMedications)}
+            accessibilityRole="button"
+            hitSlop={12}
+            style={({ pressed }) => pressed && { opacity: opacity.pressed }}>
             <Text style={styles.remindersOff}>
               Los recordatorios están desactivados ·{' '}
               <Text style={styles.remindersOffLink}>Activar</Text>
@@ -128,131 +141,121 @@ export default function MedicamentosScreen() {
 
         {showForm && (
           <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder="Nombre (ej. Wegovy)"
-              placeholderTextColor={colors.textMuted}
-              value={form.name}
-              onChangeText={(name) => setForm((f) => ({ ...f, name }))}
-            />
-
-            <View style={styles.segmentRow}>
-              {(['pen', 'tablet'] as Presentation[]).map((presentation) => (
-                <Pressable
-                  key={presentation}
-                  onPress={() => setForm((f) => ({ ...f, presentation }))}
-                  style={[
-                    styles.segment,
-                    form.presentation === presentation && styles.segmentActive,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      form.presentation === presentation && styles.segmentTextActive,
-                    ]}>
-                    {presentation === 'pen' ? 'Pluma' : 'Tabletas'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={styles.doseRow}>
+            <Field label="Nombre">
               <TextInput
-                style={[styles.input, styles.doseAmountInput]}
-                placeholder="Dosis indicada por tu médico"
+                style={styles.input}
+                accessibilityLabel="Nombre"
+                placeholder="ej. Wegovy"
                 placeholderTextColor={colors.textMuted}
+                value={form.name}
+                onChangeText={(name) => setForm((f) => ({ ...f, name }))}
+              />
+            </Field>
+
+            <Field label="Presentación">
+              <View style={styles.chipRow}>
+                {(['pen', 'tablet'] as Presentation[]).map((presentation) => (
+                  <Chip
+                    key={presentation}
+                    label={presentation === 'pen' ? 'Pluma' : 'Tabletas'}
+                    selected={form.presentation === presentation}
+                    onPress={() => setForm((f) => ({ ...f, presentation }))}
+                    style={styles.segment}
+                  />
+                ))}
+              </View>
+            </Field>
+
+            {/* Sin placeholder numérico: la app nunca sugiere una dosis. */}
+            <Field label="Dosis indicada por tu médico">
+              <TextInput
+                style={styles.input}
+                accessibilityLabel="Dosis indicada por tu médico"
                 value={form.doseAmount}
                 onChangeText={(doseAmount) => setForm((f) => ({ ...f, doseAmount }))}
                 keyboardType="decimal-pad"
               />
-              <View style={styles.unitRow}>
+              <View style={styles.chipRow}>
                 {DOSE_UNITS.map((unit) => (
-                  <Pressable
+                  <Chip
                     key={unit}
+                    label={unit}
+                    selected={form.doseUnit === unit}
                     onPress={() => setForm((f) => ({ ...f, doseUnit: unit }))}
-                    style={[styles.day, form.doseUnit === unit && styles.segmentActive]}>
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        form.doseUnit === unit && styles.segmentTextActive,
-                      ]}>
-                      {unit}
-                    </Text>
-                  </Pressable>
+                  />
                 ))}
               </View>
-            </View>
+            </Field>
 
-            <View style={styles.quantityRow}>
+            <Field label={`Cantidad por toma (${QUANTITY_UNIT[form.presentation]})`}>
               <TextInput
-                style={[styles.input, styles.quantityInput]}
-                placeholder="Cantidad por toma"
-                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                accessibilityLabel={`Cantidad por toma, en ${QUANTITY_UNIT[form.presentation]}`}
                 value={form.quantityPerDose}
                 onChangeText={(quantityPerDose) => setForm((f) => ({ ...f, quantityPerDose }))}
                 keyboardType="decimal-pad"
               />
-              <Text style={styles.quantityUnit}>{QUANTITY_UNIT[form.presentation]}</Text>
-            </View>
+            </Field>
 
-            <Pressable style={styles.input} onPress={() => setShowTimePicker(true)}>
-              <Text style={{ ...typography.bodyMd, color: colors.text }}>
-                Hora: {formatTimeOfDay(form.time)}
-              </Text>
-            </Pressable>
-            {showTimePicker && (
-              <DateTimePicker
-                value={form.time}
-                mode="time"
-                onValueChange={handleTimeChange}
-                onDismiss={() => setShowTimePicker(false)}
-              />
-            )}
+            <Field label="Hora">
+              <Pressable
+                style={({ pressed }) => [styles.input, pressed && { opacity: opacity.pressed }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Hora, ${formatTimeOfDay(form.time)}`}
+                accessibilityHint="Abre el selector de hora"
+                onPress={() => setShowTimePicker(true)}>
+                <Text style={styles.inputText}>{formatTimeOfDay(form.time)}</Text>
+              </Pressable>
+              {showTimePicker && (
+                <DateTimePicker
+                  value={form.time}
+                  mode="time"
+                  onValueChange={handleTimeChange}
+                  onDismiss={() => setShowTimePicker(false)}
+                />
+              )}
+            </Field>
 
-            <View style={styles.segmentRow}>
-              {(['daily', 'weekly'] as Frequency[]).map((frequency) => (
-                <Pressable
-                  key={frequency}
-                  onPress={() => setForm((f) => ({ ...f, frequency, dayOfWeek: null }))}
-                  style={[styles.segment, form.frequency === frequency && styles.segmentActive]}>
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      form.frequency === frequency && styles.segmentTextActive,
-                    ]}>
-                    {frequency === 'daily' ? 'Diario' : 'Semanal'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {form.frequency === 'weekly' && (
-              <View style={styles.segmentRow}>
-                {DAYS.map((label, index) => (
-                  <Pressable
-                    key={label}
-                    onPress={() => setForm((f) => ({ ...f, dayOfWeek: index }))}
-                    style={[styles.day, form.dayOfWeek === index && styles.segmentActive]}>
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        form.dayOfWeek === index && styles.segmentTextActive,
-                      ]}>
-                      {label}
-                    </Text>
-                  </Pressable>
+            <Field label="Frecuencia">
+              <View style={styles.chipRow}>
+                {(['daily', 'weekly'] as Frequency[]).map((frequency) => (
+                  <Chip
+                    key={frequency}
+                    label={frequency === 'daily' ? 'Diario' : 'Semanal'}
+                    selected={form.frequency === frequency}
+                    onPress={() => setForm((f) => ({ ...f, frequency, dayOfWeek: null }))}
+                    style={styles.segment}
+                  />
                 ))}
               </View>
+            </Field>
+
+            {form.frequency === 'weekly' && (
+              <Field label="Día de la semana">
+                <View style={styles.chipRow}>
+                  {DAYS.map((label, index) => (
+                    <Chip
+                      key={label}
+                      label={label}
+                      selected={form.dayOfWeek === index}
+                      onPress={() => setForm((f) => ({ ...f, dayOfWeek: index }))}
+                    />
+                  ))}
+                </View>
+              </Field>
             )}
 
-            {error && <Text style={styles.error}>{error}</Text>}
+            {error && (
+              <Text style={styles.error} accessibilityRole="alert">
+                {error}
+              </Text>
+            )}
 
-            <Pressable
-              style={styles.saveButton}
+            <Button
+              label={saving ? 'Guardando…' : 'Guardar'}
               onPress={handleSave}
-              disabled={saving}>
-              <Text style={styles.saveButtonText}>{saving ? 'Guardando…' : 'Guardar'}</Text>
-            </Pressable>
+              disabled={saving}
+            />
           </View>
         )}
 
@@ -267,22 +270,34 @@ export default function MedicamentosScreen() {
             key={med.id}
             medication={med}
             stock={stock[med.id]}
-            onChanged={reloadMedications}
           />
         ))}
 
         {archived.length > 0 && (
           <View style={styles.archived}>
-            <Pressable onPress={() => setShowArchived((v) => !v)}>
-              <Text style={styles.archivedTitle}>
-                {showArchived ? '▾' : '▸'} Suspendidos ({archived.length})
-              </Text>
+            <Pressable
+              onPress={() => setShowArchived((v) => !v)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showArchived }}
+              hitSlop={12}
+              style={({ pressed }) => [styles.archivedToggle, pressed && { opacity: opacity.pressed }]}>
+              <Ionicons
+                name={showArchived ? 'chevron-down' : 'chevron-forward'}
+                size={16}
+                color={colors.textMuted}
+              />
+              <Text style={styles.archivedTitle}>Suspendidos ({archived.length})</Text>
             </Pressable>
             {showArchived &&
               archived.map((med) => (
                 <View key={med.id} style={styles.archivedRow}>
                   <Text style={styles.archivedName}>{med.name}</Text>
-                  <Pressable onPress={() => handleUnarchive(med.id)}>
+                  <Pressable
+                    onPress={() => handleUnarchive(med.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Reanudar ${med.name}`}
+                    hitSlop={12}
+                    style={({ pressed }) => pressed && { opacity: opacity.pressed }}>
                     <Text style={styles.remindersOffLink}>Reanudar</Text>
                   </Pressable>
                 </View>
@@ -317,18 +332,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   addButton: {
-    backgroundColor: colors.primary,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  addButtonActive: {
-    backgroundColor: colors.surfaceWarm,
-  },
-  addButtonText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.surface,
   },
   placeholder: {
     ...typography.bodyMd,
@@ -341,6 +345,11 @@ const styles = StyleSheet.create({
   archived: {
     gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  archivedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   archivedTitle: {
     ...typography.label,
@@ -367,10 +376,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   input: {
     ...typography.bodyMd,
+    minHeight: 44,
+    justifyContent: 'center',
     color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
@@ -378,75 +389,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  doseRow: {
-    gap: spacing.sm,
-  },
-  doseAmountInput: {
-    width: '100%',
-  },
-  quantityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  quantityInput: {
-    flex: 1,
-  },
-  quantityUnit: {
+  inputText: {
     ...typography.bodyMd,
-    color: colors.textMuted,
+    color: colors.text,
   },
-  unitRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  segmentRow: {
+  chipRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     flexWrap: 'wrap',
   },
   segment: {
     flex: 1,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-  },
-  day: {
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  segmentActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  segmentText: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-  },
-  segmentTextActive: {
-    color: colors.primaryDark,
-    fontFamily: fontFamilyMedium,
   },
   error: {
     ...typography.bodySm,
     color: colors.terracottaText,
-  },
-  saveButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  saveButtonText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.surface,
   },
 });

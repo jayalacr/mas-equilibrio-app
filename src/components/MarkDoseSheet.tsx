@@ -1,8 +1,20 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
+import { Button } from '@/components/Button';
+import { Chip } from '@/components/Chip';
+import { Field } from '@/components/Field';
 import { getLastInjectionSite, recordDoseTaken } from '@/db/queries/doses';
 import type { MedicationWithSchedule } from '@/db/queries/medications';
 import {
@@ -12,7 +24,7 @@ import {
 } from '@/features/doses/todayDoses';
 import { describeDose } from '@/features/medications/doseUnits';
 import { formatTimeOfDay } from '@/lib/formatDate';
-import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
+import { colors, fontFamilyBold, opacity, radii, spacing, typography } from '@/theme';
 
 const SITES = Object.keys(INJECTION_SITE_LABELS) as InjectionSite[];
 
@@ -64,63 +76,74 @@ export function MarkDoseSheet({ dose, onClose, onSaved }: Props) {
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      {/* En iOS el teclado no empuja el modal solo: sin esto tapa la nota de efectos. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.backdrop}>
         <View style={styles.sheet}>
           <Text style={styles.title}>{medication.name}</Text>
           <Text style={styles.subtitle}>Dosis indicada: {describeDose(medication)}</Text>
 
-          <Pressable style={styles.input} onPress={() => setShowTimePicker(true)}>
-            <Text style={styles.inputText}>Hora de la toma: {formatTimeOfDay(takenAt)}</Text>
-          </Pressable>
-          {showTimePicker && (
-            <DateTimePicker
-              value={takenAt}
-              mode="time"
-              onValueChange={handleTimeChange}
-              onDismiss={() => setShowTimePicker(false)}
-            />
-          )}
+          <Field label="Hora de la toma">
+            <Pressable
+              style={({ pressed }) => [styles.input, pressed && { opacity: opacity.pressed }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Hora de la toma, ${formatTimeOfDay(takenAt)}`}
+              accessibilityHint="Abre el selector de hora"
+              onPress={() => setShowTimePicker(true)}>
+              <Text style={styles.inputText}>{formatTimeOfDay(takenAt)}</Text>
+            </Pressable>
+            {showTimePicker && (
+              <DateTimePicker
+                value={takenAt}
+                mode="time"
+                onValueChange={handleTimeChange}
+                onDismiss={() => setShowTimePicker(false)}
+              />
+            )}
+          </Field>
 
           {isPen && (
-            <View style={styles.section}>
-              <Text style={styles.label}>Zona de inyección</Text>
+            <Field
+              label="Zona de inyección"
+              hint={lastSite ? `Última vez: ${INJECTION_SITE_LABELS[lastSite]}` : undefined}>
               <View style={styles.chipRow}>
                 {SITES.map((s) => (
-                  <Pressable
+                  <Chip
                     key={s}
+                    label={INJECTION_SITE_LABELS[s]}
+                    selected={site === s}
                     onPress={() => setSite(site === s ? null : s)}
-                    style={[styles.chip, site === s && styles.chipActive]}>
-                    <Text style={[styles.chipText, site === s && styles.chipTextActive]}>
-                      {INJECTION_SITE_LABELS[s]}
-                    </Text>
-                  </Pressable>
+                    style={styles.chip}
+                  />
                 ))}
               </View>
-              {lastSite && (
-                <Text style={styles.hint}>Última vez: {INJECTION_SITE_LABELS[lastSite]}</Text>
-              )}
-            </View>
+            </Field>
           )}
 
-          <TextInput
-            style={[styles.input, styles.inputText, styles.noteInput]}
-            placeholder="¿Notaste algún efecto? (opcional)"
-            placeholderTextColor={colors.textMuted}
-            value={note}
-            onChangeText={setNote}
-            multiline
-          />
+          <Field label="Efectos o notas (opcional)">
+            <TextInput
+              style={[styles.input, styles.inputText, styles.noteInput]}
+              accessibilityLabel="Efectos o notas, opcional"
+              placeholder="¿Notaste algún efecto?"
+              placeholderTextColor={colors.textMuted}
+              value={note}
+              onChangeText={setNote}
+              multiline
+            />
+          </Field>
 
           <View style={styles.buttonRow}>
-            <Pressable style={[styles.button, styles.cancelButton]} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancelar</Text>
-            </Pressable>
-            <Pressable style={styles.button} onPress={handleSave} disabled={saving}>
-              <Text style={styles.saveText}>{saving ? 'Guardando…' : 'Guardar'}</Text>
-            </Pressable>
+            <Button label="Cancelar" variant="secondary" onPress={onClose} style={styles.button} />
+            <Button
+              label={saving ? 'Guardando…' : 'Guardar'}
+              onPress={handleSave}
+              disabled={saving}
+              style={styles.button}
+            />
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -148,19 +171,9 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.textMuted,
   },
-  section: {
-    gap: spacing.sm,
-  },
-  label: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.text,
-  },
-  hint: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-  },
   input: {
+    minHeight: 44,
+    justifyContent: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
@@ -182,24 +195,6 @@ const styles = StyleSheet.create({
   },
   chip: {
     flex: 1,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-  },
-  chipActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-  },
-  chipTextActive: {
-    color: colors.primaryDark,
-    fontFamily: fontFamilyMedium,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -207,22 +202,5 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-  },
-  cancelButton: {
-    backgroundColor: colors.surfaceWarm,
-  },
-  saveText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.surface,
-  },
-  cancelText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.text,
   },
 });

@@ -1,8 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, AppState, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Button } from '@/components/Button';
 import { MarkDoseSheet } from '@/components/MarkDoseSheet';
 import { MedicalDisclaimer } from '@/components/MedicalDisclaimer';
 import { listDosesTakenSince, undoDoseTaken } from '@/db/queries/doses';
@@ -69,10 +71,25 @@ export default function HoyScreen() {
     return () => subscription.remove();
   }, [reload]);
 
-  async function handleUndo(id: string) {
-    await undoDoseTaken(id);
-    await reload();
-    syncReminders(); // vuelve a programar el segundo aviso de esa toma
+  // Deshacer borra el registro (con zona y nota): se confirma para evitar toques accidentales.
+  function confirmUndo(dose: Dose) {
+    const taken = dose.taken!;
+    Alert.alert(
+      '¿Deshacer esta toma?',
+      `Se borrará el registro de ${dose.medication.name} de las ${formatTimeOfDay(new Date(taken.takenAt))}, junto con la zona y la nota que hayas anotado.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Deshacer',
+          style: 'destructive',
+          onPress: async () => {
+            await undoDoseTaken(taken.id);
+            await reload();
+            syncReminders(); // vuelve a programar el segundo aviso de esa toma
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -110,29 +127,40 @@ export default function HoyScreen() {
                   </Text>
                 )}
                 {dose.taken && (
-                  <Text style={styles.takenText}>
-                    ✓ Tomada {formatTimeOfDay(new Date(dose.taken.takenAt))}
-                    {dose.taken.injectionSite
-                      ? ` · ${INJECTION_SITE_LABELS[dose.taken.injectionSite]}`
-                      : ''}
-                  </Text>
+                  <View style={styles.takenRow}>
+                    {/* Decorativo: el texto ya dice "Tomada". */}
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={16}
+                      color={colors.successText}
+                      accessibilityElementsHidden
+                      importantForAccessibility="no"
+                    />
+                    <Text style={styles.takenText}>
+                      Tomada {formatTimeOfDay(new Date(dose.taken.takenAt))}
+                      {dose.taken.injectionSite
+                        ? ` · ${INJECTION_SITE_LABELS[dose.taken.injectionSite]}`
+                        : ''}
+                    </Text>
+                  </View>
                 )}
               </View>
             </View>
             {dose.taken ? (
-              <Pressable onPress={() => handleUndo(dose.taken!.id)} style={styles.undoButton}>
-                <Text style={styles.undoText}>Deshacer</Text>
-              </Pressable>
+              <Button
+                label="Deshacer"
+                variant="text"
+                onPress={() => confirmUndo(dose)}
+                style={styles.undoButton}
+              />
             ) : (
-              <Pressable onPress={() => setSelected(dose)} style={styles.markButton}>
-                <Text style={styles.markText}>Marcar tomada</Text>
-              </Pressable>
+              <Button label="Marcar tomada" onPress={() => setSelected(dose)} />
             )}
           </View>
         ))}
 
-        <Link href="/historial" style={styles.historyLink}>
-          Ver historial de tomas
+        <Link href="/historial" asChild>
+          <Button label="Ver historial de tomas" variant="text" style={styles.historyLink} />
         </Link>
       </ScrollView>
       <MedicalDisclaimer />
@@ -175,11 +203,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   historyLink: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.primaryDark,
     alignSelf: 'center',
-    padding: spacing.sm,
   },
   placeholder: {
     ...typography.bodyMd,
@@ -231,30 +255,17 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.terracottaText,
   },
+  takenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
   takenText: {
     ...typography.bodySm,
     fontFamily: fontFamilyMedium,
     color: colors.successText,
   },
-  markButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  markText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.surface,
-  },
   undoButton: {
     alignSelf: 'flex-end',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
-  undoText: {
-    ...typography.label,
-    fontFamily: fontFamilyMedium,
-    color: colors.textMuted,
   },
 });

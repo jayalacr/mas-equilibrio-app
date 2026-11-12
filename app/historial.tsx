@@ -1,14 +1,23 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import { SectionList, StyleSheet, Text, View } from 'react-native';
 
+import { Chip } from '@/components/Chip';
 import { MedicalDisclaimer } from '@/components/MedicalDisclaimer';
 import { listDoseLog } from '@/db/queries/doses';
 import { groupDosesByDay, type DoseLogEntry } from '@/features/doses/doseLog';
 import { INJECTION_SITE_LABELS } from '@/features/doses/todayDoses';
 import { describeDose } from '@/features/medications/doseUnits';
 import { formatLongDate, formatTimeOfDay } from '@/lib/formatDate';
-import { colors, fontFamily, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
+import {
+  colors,
+  fontFamily,
+  fontFamilyBold,
+  fontFamilyMedium,
+  radii,
+  spacing,
+  typography,
+} from '@/theme';
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -81,14 +90,13 @@ export default function HistorialScreen() {
           medications.length > 1 ? (
             <View style={styles.chips}>
               {[{ id: null, name: 'Todos' }, ...medications].map((med) => (
-                <Pressable
+                <Chip
                   key={med.id ?? 'all'}
+                  label={med.name}
+                  selected={filter === med.id}
                   onPress={() => setFilter(med.id)}
-                  style={[styles.chip, filter === med.id && styles.chipActive]}>
-                  <Text style={[styles.chipText, filter === med.id && styles.chipTextActive]}>
-                    {med.name}
-                  </Text>
-                </Pressable>
+                  style={styles.chip}
+                />
               ))}
             </View>
           ) : undefined
@@ -128,24 +136,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   chip: {
-    borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.surface,
-  },
-  chipActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-  },
-  chipTextActive: {
-    color: colors.primaryDark,
-    fontFamily: fontFamilyMedium,
   },
   dayTitle: {
     ...typography.label,
