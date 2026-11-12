@@ -181,3 +181,92 @@ export async function listMedicationsWithSchedule(): Promise<MedicationWithSched
      ORDER BY m.created_at DESC`
   );
 }
+
+export type MedicationEditInput = {
+  name: string;
+  time: Date;
+  frequency: Frequency;
+  dayOfWeek: number | null;
+};
+
+export type ArchivedMedication = {
+  id: string;
+  name: string;
+  archivedAt: string;
+};
+
+/**
+ * Cambia nombre y horario. Si el horario cambia, se cierra el vigente y se abre
+ * uno nuevo (igual que en changeDose) para conservar a qué hora tocaba cada toma.
+ */
+export async function updateMedication(id: string, input: MedicationEditInput): Promise<void> {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+  const timeOfDay = formatTimeOfDay(input.time);
+  const dayOfWeek = input.frequency === 'weekly' ? input.dayOfWeek : null;
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE medications SET name = ? WHERE id = ?', [input.name.trim(), id]);
+
+    const active = await db.getFirstAsync<{
+      id: string;
+      dose_description: string;
+      quantity_per_dose: number | null;
+      time_of_day: string;
+      frequency: Frequency;
+      day_of_week: number | null;
+    }>(
+      `SELECT id, dose_description, quantity_per_dose, time_of_day, frequency, day_of_week
+       FROM dose_schedules WHERE medication_id = ? AND active_to IS NULL`,
+      [id]
+    );
+    if (
+      !active ||
+      (active.time_of_day === timeOfDay &&
+        active.frequency === input.frequency &&
+        active.day_of_week === dayOfWeek)
+    ) {
+      return;
+    }
+
+    await db.runAsync('UPDATE dose_schedules SET active_to = ? WHERE id = ?', [now, active.id]);
+    await db.runAsync(
+      `INSERT INTO dose_schedules
+         (id, medication_id, dose_description, quantity_per_dose, time_of_day, frequency,
+          day_of_week, active_from)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        Crypto.randomUUID(),
+        id,
+        active.dose_description,
+        active.quantity_per_dose,
+        timeOfDay,
+        input.frequency,
+        dayOfWeek,
+        now,
+      ]
+    );
+  });
+}
+
+/** Suspender: deja de aparecer en Hoy y en recordatorios. No borra nada. */
+export async function archiveMedication(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('UPDATE medications SET archived_at = ? WHERE id = ?', [
+    new Date().toISOString(),
+    id,
+  ]);
+}
+
+export async function unarchiveMedication(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('UPDATE medications SET archived_at = NULL WHERE id = ?', [id]);
+}
+
+export async function listArchivedMedications(): Promise<ArchivedMedication[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<ArchivedMedication>(
+    `SELECT id, name, archived_at as archivedAt FROM medications
+     WHERE archived_at IS NOT NULL ORDER BY archived_at DESC`
+  );
+}

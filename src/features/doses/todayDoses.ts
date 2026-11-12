@@ -57,6 +57,28 @@ function occurrenceDay(med: ScheduledMedication, now: Date): Date {
 }
 
 /**
+ * Toma registrada que cubre la ocurrencia de `day`: cualquiera del mismo
+ * medicamento programada dentro del periodo que termina ese día (1 día si es
+ * diario, 7 si es semanal). Así, cambiar la hora o el día de la semana no hace
+ * que una toma ya hecha se vuelva a pedir (evita una doble dosis).
+ */
+export function findTakenForOccurrence(
+  medication: ScheduledMedication,
+  takenDoses: TakenDose[],
+  day: Date
+): TakenDose | null {
+  const periodDays = medication.frequency === 'weekly' ? 7 : 1;
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - periodDays);
+  return (
+    takenDoses.find((t) => {
+      const scheduled = new Date(t.scheduledTime);
+      return t.medicationId === medication.id && scheduled >= start && scheduled < end;
+    }) ?? null
+  );
+}
+
+/**
  * Lista de tomas que se muestran hoy, ordenadas por hora programada.
  * Las semanales sin marcar siguen apareciendo hasta que se marquen o llegue
  * su siguiente día.
@@ -76,10 +98,7 @@ export function buildTodayDoses<M extends ScheduledMedication>(
     const [hours, minutes] = medication.timeOfDay.split(':').map(Number);
     const scheduledAt = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes);
     const scheduledTime = scheduledAt.toISOString();
-    const taken =
-      takenDoses.find(
-        (t) => t.medicationId === medication.id && t.scheduledTime === scheduledTime
-      ) ?? null;
+    const taken = findTakenForOccurrence(medication, takenDoses, day);
 
     const fromPastDay = !isSameLocalDay(day, now);
     if (fromPastDay && taken && !isSameLocalDay(new Date(taken.takenAt), now)) continue;

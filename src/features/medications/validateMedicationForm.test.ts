@@ -1,4 +1,5 @@
 import {
+  validateMedicationEdit,
   validateMedicationForm,
   validateStock,
   type MedicationFormState,
@@ -65,5 +66,23 @@ describe('validateStock', () => {
     expect(validateStock('-1')).toMatch(/quedan/);
     expect(validateStock('abc')).toMatch(/quedan/);
     expect(validateStock('')).toMatch(/quedan/);
+  });
+});
+
+describe('validateMedicationEdit', () => {
+  it('accepts a name with a daily schedule', () => {
+    expect(validateMedicationEdit({ name: 'Metformina', frequency: 'daily', dayOfWeek: null })).toBeNull();
+  });
+
+  it('requires a name', () => {
+    expect(validateMedicationEdit({ name: '  ', frequency: 'daily', dayOfWeek: null })).toBe(
+      'Escribe el nombre del medicamento.'
+    );
+  });
+
+  it('requires the day for weekly', () => {
+    expect(validateMedicationEdit({ name: 'Wegovy', frequency: 'weekly', dayOfWeek: null })).toBe(
+      'Elige el día de la semana para la toma semanal.'
+    );
   });
 });

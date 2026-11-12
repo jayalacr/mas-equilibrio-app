@@ -51,3 +51,14 @@ export function validateMedicationForm(form: MedicationFormState): string | null
   }
   return null;
 }
+
+export type MedicationEditState = Pick<MedicationFormState, 'name' | 'frequency' | 'dayOfWeek'>;
+
+/** Al editar solo cambian nombre y horario; la dosis va por "Cambiar dosis". */
+export function validateMedicationEdit(form: MedicationEditState): string | null {
+  if (!form.name.trim()) return 'Escribe el nombre del medicamento.';
+  if (form.frequency === 'weekly' && form.dayOfWeek === null) {
+    return 'Elige el día de la semana para la toma semanal.';
+  }
+  return null;
+}

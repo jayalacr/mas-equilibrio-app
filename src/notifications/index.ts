@@ -70,10 +70,11 @@ function toExpoTrigger(trigger: ReminderTrigger): Notifications.NotificationTrig
 async function runSync(): Promise<void> {
   if (!(await remindersEnabled())) return;
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // 7 días: una semanal cuenta como hecha si se marcó en la última semana.
+  const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
   const [medications, taken, profile] = await Promise.all([
     listMedicationsWithSchedule(),
-    listDosesTakenSince(startOfToday.toISOString()),
+    listDosesTakenSince(weekAgo.toISOString()),
     getProfile(),
   ]);
 

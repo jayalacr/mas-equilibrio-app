@@ -1,10 +1,14 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
+  archiveMedication,
   changeDose,
   listDoseHistory,
+  updateMedication,
   type DoseHistoryEntry,
+  type Frequency,
   type MedicationWithSchedule,
 } from '@/db/queries/medications';
 import { setStock } from '@/db/queries/inventory';
@@ -18,9 +22,12 @@ import {
 import {
   parseDecimal,
   validateDoseAmountAndUnit,
+  validateMedicationEdit,
   validateQuantityPerDose,
   validateStock,
 } from '@/features/medications/validateMedicationForm';
+import { formatTimeOfDay } from '@/lib/formatDate';
+import { syncReminders } from '@/notifications';
 import { colors, fontFamilyBold, fontFamilyMedium, radii, spacing, typography } from '@/theme';
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -43,6 +50,13 @@ function formatChangedAt(iso: string): string {
 function describeStock(stock: StockStatus, unit: string): string {
   const remaining = `Quedan ${formatQuantity(Math.max(0, stock.remaining))} ${unit}`;
   return stock.daysLeft === null ? remaining : `${remaining} · ~${stock.daysLeft} días`;
+}
+
+function timeOfDayToDate(timeOfDay: string): Date {
+  const [hours, minutes] = timeOfDay.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, minutes, 0, 0);
+  return date;
 }
 
 // Los medicamentos dados de alta antes de v2 pueden tener "clicks" o "tabletas" como unidad.
@@ -74,6 +88,15 @@ export function MedicationCard({ medication, stock, onChanged }: Props) {
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<DoseHistoryEntry[] | null>(null);
 
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [edit, setEdit] = useState({
+    name: '',
+    time: new Date(),
+    frequency: 'daily' as Frequency,
+    dayOfWeek: null as number | null,
+  });
+
   async function loadHistory() {
     setHistory(await listDoseHistory(medication.id));
   }
@@ -96,6 +119,7 @@ export function MedicationCard({ medication, stock, onChanged }: Props) {
     setNote('');
     setError(null);
     setShowStockForm(false);
+    setShowEditForm(false);
     setShowChangeForm(true);
   }
 
@@ -103,7 +127,57 @@ export function MedicationCard({ medication, stock, onChanged }: Props) {
     setStockInput(stock ? String(Math.max(0, stock.remaining)) : '');
     setError(null);
     setShowChangeForm(false);
+    setShowEditForm(false);
     setShowStockForm((v) => !v);
+  }
+
+  function openEditForm() {
+    setEdit({
+      name: medication.name,
+      time: timeOfDayToDate(medication.timeOfDay),
+      frequency: medication.frequency,
+      dayOfWeek: medication.dayOfWeek,
+    });
+    setError(null);
+    setShowChangeForm(false);
+    setShowStockForm(false);
+    setShowEditForm((v) => !v);
+  }
+
+  async function handleSaveEdit() {
+    const validationError = validateMedicationEdit(edit);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateMedication(medication.id, edit);
+      syncReminders(); // la hora o el día pudieron cambiar
+      setShowEditForm(false);
+      onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function confirmArchive() {
+    Alert.alert(
+      `¿Suspender ${medication.name}?`,
+      'Dejará de aparecer en Hoy y no recibirás recordatorios. Tu historial se conserva y puedes reanudarlo cuando quieras.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Suspender',
+          style: 'destructive',
+          onPress: async () => {
+            await archiveMedication(medication.id);
+            syncReminders();
+            onChanged();
+          },
+        },
+      ]
+    );
   }
 
   async function handleSaveDoseChange() {
@@ -171,7 +245,73 @@ export function MedicationCard({ medication, stock, onChanged }: Props) {
             {showHistory ? 'Ocultar historial' : 'Historial'}
           </Text>
         </Pressable>
+        <Pressable onPress={openEditForm} style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Editar</Text>
+        </Pressable>
+        <Pressable onPress={confirmArchive} style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Suspender</Text>
+        </Pressable>
       </View>
+
+      {showEditForm && (
+        <View style={styles.changeForm}>
+          <TextInput
+            style={styles.input}
+            placeholder="Nombre"
+            placeholderTextColor={colors.textMuted}
+            value={edit.name}
+            onChangeText={(name) => setEdit((e) => ({ ...e, name }))}
+          />
+          <Pressable style={styles.input} onPress={() => setShowTimePicker(true)}>
+            <Text style={{ ...typography.bodyMd, color: colors.text }}>
+              Hora: {formatTimeOfDay(edit.time)}
+            </Text>
+          </Pressable>
+          {showTimePicker && (
+            <DateTimePicker
+              value={edit.time}
+              mode="time"
+              onValueChange={(_event: unknown, time: Date) => {
+                setShowTimePicker(false);
+                setEdit((e) => ({ ...e, time }));
+              }}
+              onDismiss={() => setShowTimePicker(false)}
+            />
+          )}
+          <View style={styles.unitRow}>
+            {(['daily', 'weekly'] as Frequency[]).map((frequency) => (
+              <Pressable
+                key={frequency}
+                onPress={() => setEdit((e) => ({ ...e, frequency, dayOfWeek: null }))}
+                style={[styles.chip, edit.frequency === frequency && styles.chipActive]}>
+                <Text
+                  style={[styles.chipText, edit.frequency === frequency && styles.chipTextActive]}>
+                  {frequency === 'daily' ? 'Diario' : 'Semanal'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {edit.frequency === 'weekly' && (
+            <View style={styles.unitRow}>
+              {DAYS.map((label, index) => (
+                <Pressable
+                  key={label}
+                  onPress={() => setEdit((e) => ({ ...e, dayOfWeek: index }))}
+                  style={[styles.chip, edit.dayOfWeek === index && styles.chipActive]}>
+                  <Text
+                    style={[styles.chipText, edit.dayOfWeek === index && styles.chipTextActive]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {error && <Text style={styles.error}>{error}</Text>}
+          <Pressable style={styles.saveButton} onPress={handleSaveEdit} disabled={saving}>
+            <Text style={styles.saveButtonText}>{saving ? 'Guardando…' : 'Guardar'}</Text>
+          </Pressable>
+        </View>
+      )}
 
       {showChangeForm && (
         <View style={styles.changeForm}>

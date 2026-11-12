@@ -76,4 +76,23 @@ describe('buildTodayDoses', () => {
       buildTodayDoses([med({ frequency: 'weekly', dayOfWeek: 0, createdAt })], [], NOW)
     ).toEqual([]);
   });
+
+  it('cuenta como hecha la toma de hoy aunque se cambie la hora después de marcarla', () => {
+    const t = taken('m1', new Date(2026, 9, 31, 8, 0), new Date(2026, 9, 31, 8, 5));
+    const [dose] = buildTodayDoses([med({ timeOfDay: '09:00' })], [t], NOW);
+    expect(dose.taken?.id).toBe('t-m1');
+  });
+
+  it('no vuelve a pedir la semanal si se cambia el día después de aplicarla', () => {
+    // Aplicada el lunes 26 y luego se cambia a sábado (hoy).
+    const t = taken('m1', new Date(2026, 9, 26, 8, 0), new Date(2026, 9, 26, 8, 5));
+    const [dose] = buildTodayDoses([med({ frequency: 'weekly', dayOfWeek: 5 })], [t], NOW);
+    expect(dose.taken?.id).toBe('t-m1');
+  });
+
+  it('no cuenta la semanal de la semana anterior', () => {
+    const t = taken('m1', new Date(2026, 9, 24, 8, 0), new Date(2026, 9, 24, 8, 5));
+    const [dose] = buildTodayDoses([med({ frequency: 'weekly', dayOfWeek: 5 })], [t], NOW);
+    expect(dose.taken).toBeNull();
+  });
 });

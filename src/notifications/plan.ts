@@ -1,5 +1,9 @@
 import type { Presentation } from '@/db/queries/medications';
-import type { ScheduledMedication, TakenDose } from '@/features/doses/todayDoses';
+import {
+  findTakenForOccurrence,
+  type ScheduledMedication,
+  type TakenDose,
+} from '@/features/doses/todayDoses';
 
 /** Minutos después de la hora programada para el segundo aviso. */
 export const FOLLOW_UP_MINUTES = 30;
@@ -92,11 +96,8 @@ export function planReminders(
       const followUpAt = new Date(scheduledAt.getTime() + FOLLOW_UP_MINUTES * 60_000);
       if (followUpAt <= now) continue;
 
+      if (findTakenForOccurrence(med, taken, day)) continue;
       const scheduledTime = scheduledAt.toISOString();
-      const isTaken = taken.some(
-        (t) => t.medicationId === med.id && t.scheduledTime === scheduledTime
-      );
-      if (isTaken) continue;
 
       reminders.push({
         id: `followup:${med.id}:${scheduledTime}`,

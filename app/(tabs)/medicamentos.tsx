@@ -8,7 +8,10 @@ import { MedicalDisclaimer } from '@/components/MedicalDisclaimer';
 import { MedicationCard } from '@/components/MedicationCard';
 import {
   createMedication,
+  listArchivedMedications,
   listMedicationsWithSchedule,
+  unarchiveMedication,
+  type ArchivedMedication,
   type Frequency,
   type MedicationWithSchedule,
   type Presentation,
@@ -49,14 +52,18 @@ export default function MedicamentosScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [remindersOff, setRemindersOff] = useState(false);
+  const [archived, setArchived] = useState<ArchivedMedication[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   const reloadMedications = useCallback(async () => {
     const now = new Date();
-    const [meds, rows] = await Promise.all([
+    const [meds, rows, archivedMeds] = await Promise.all([
       listMedicationsWithSchedule(),
       listStock(consumptionWindowStart(now).toISOString()),
+      listArchivedMedications(),
     ]);
     setMedications(meds);
+    setArchived(archivedMeds);
     setStock(buildStockStatus(meds, rows, now));
     setRemindersOff(!(await remindersEnabled()));
   }, []);
@@ -90,6 +97,12 @@ export default function MedicamentosScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleUnarchive(id: string) {
+    await unarchiveMedication(id);
+    syncReminders();
+    await reloadMedications();
   }
 
   return (
@@ -257,6 +270,25 @@ export default function MedicamentosScreen() {
             onChanged={reloadMedications}
           />
         ))}
+
+        {archived.length > 0 && (
+          <View style={styles.archived}>
+            <Pressable onPress={() => setShowArchived((v) => !v)}>
+              <Text style={styles.archivedTitle}>
+                {showArchived ? '▾' : '▸'} Suspendidos ({archived.length})
+              </Text>
+            </Pressable>
+            {showArchived &&
+              archived.map((med) => (
+                <View key={med.id} style={styles.archivedRow}>
+                  <Text style={styles.archivedName}>{med.name}</Text>
+                  <Pressable onPress={() => handleUnarchive(med.id)}>
+                    <Text style={styles.remindersOffLink}>Reanudar</Text>
+                  </Pressable>
+                </View>
+              ))}
+          </View>
+        )}
       </ScrollView>
       <MedicalDisclaimer />
     </SafeAreaView>
@@ -305,6 +337,25 @@ const styles = StyleSheet.create({
   remindersOff: {
     ...typography.bodySm,
     color: colors.textMuted,
+  },
+  archived: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  archivedTitle: {
+    ...typography.label,
+    fontFamily: fontFamilyMedium,
+    color: colors.textMuted,
+  },
+  archivedRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  archivedName: {
+    ...typography.bodyMd,
+    color: colors.text,
   },
   remindersOffLink: {
     fontFamily: fontFamilyMedium,
