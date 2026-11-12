@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
+import type { DoseLogEntry } from '@/features/doses/doseLog';
 import type { InjectionSite, TakenDose } from '@/features/doses/todayDoses';
 
 import { getDatabase } from '../index';
@@ -75,4 +76,20 @@ export async function getLastInjectionSite(medicationId: string): Promise<Inject
     [medicationId]
   );
   return row?.injection_site ?? null;
+}
+
+/** Todas las tomas registradas, incluidas las de medicamentos suspendidos. */
+// ponytail: sin paginación; SectionList solo dibuja lo visible. Paginar si se nota lento.
+export async function listDoseLog(): Promise<DoseLogEntry[]> {
+  const db = await getDatabase();
+  return db.getAllAsync<DoseLogEntry>(
+    `SELECT d.id as id, d.medication_id as medicationId, m.name as medicationName,
+            m.presentation as presentation, d.dose_description as doseDescription,
+            d.quantity_taken as quantityTaken, d.scheduled_time as scheduledTime,
+            d.taken_at as takenAt, d.injection_site as injectionSite,
+            d.side_effect_note as sideEffectNote
+     FROM doses_taken d
+     JOIN medications m ON m.id = d.medication_id
+     ORDER BY d.scheduled_time DESC`
+  );
 }

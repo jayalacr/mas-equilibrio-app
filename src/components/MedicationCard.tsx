@@ -1,4 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -244,6 +245,11 @@ export function MedicationCard({ medication, stock, onChanged }: Props) {
           <Text style={styles.actionButtonText}>
             {showHistory ? 'Ocultar historial' : 'Historial'}
           </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push({ pathname: '/historial', params: { med: medication.id } })}
+          style={styles.actionButton}>
+          <Text style={styles.actionButtonText}>Tomas</Text>
         </Pressable>
         <Pressable onPress={openEditForm} style={styles.actionButton}>
           <Text style={styles.actionButtonText}>Editar</Text>

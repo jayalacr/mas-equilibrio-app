@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -130,6 +130,10 @@ export default function HoyScreen() {
             )}
           </View>
         ))}
+
+        <Link href="/historial" style={styles.historyLink}>
+          Ver historial de tomas
+        </Link>
       </ScrollView>
       <MedicalDisclaimer />
 
@@ -169,6 +173,13 @@ const styles = StyleSheet.create({
   date: {
     ...typography.bodyMd,
     color: colors.textMuted,
+  },
+  historyLink: {
+    ...typography.label,
+    fontFamily: fontFamilyMedium,
+    color: colors.primaryDark,
+    alignSelf: 'center',
+    padding: spacing.sm,
   },
   placeholder: {
     ...typography.bodyMd,
